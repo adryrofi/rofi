@@ -1,35 +1,22 @@
 import { loadProducts } from "./products_real";
 
-function getMinAgeFromCategory(category: string) {
-  if (!category) return 0;
+function hasMatch(values: string[] | string | undefined, target: string) {
+  if (!values || !target) return false;
+  if (Array.isArray(values)) return values.includes(target);
+  return values === target;
+}
 
-  const cat = category.toLowerCase();
-
-  if (cat.includes("bambini") || cat.includes("giochi")) return 0;
-  if (cat.includes("tech")) return 12;
-  if (cat.includes("fumo") || cat.includes("alcol")) return 18;
-
-  return 0;
+function getFirstValue(values: string[] | string | undefined) {
+  if (!values) return "";
+  if (Array.isArray(values)) return values[0] || "";
+  return values;
 }
 
 function isValidProduct(product: any, answers: any) {
   const ageValue = answers.age || "";
-  const userAge = ageValue === "25+" ? 25 : parseInt(ageValue.split("-")[0] || "0");
-
-  const minAge =
-    parseInt(product.MinAge || "0") ||
-    getMinAgeFromCategory(product.category);
-
-  if (userAge < minAge) {
-    return false;
-  }
 
   if (product.age && ageValue) {
-    if (ageValue === "25+") {
-      if (product.age === "0-12" || product.age === "13-18" || product.age === "18-25") {
-        return false;
-      }
-    } else if (product.age !== ageValue) {
+    if (!hasMatch(product.age, ageValue)) {
       return false;
     }
   }
@@ -44,139 +31,211 @@ type Answers = {
   personality?: string;
   gender?: string;
   budget?: string;
+  page?: number;
 };
 
-export function getTopProducts(answers: Answers = {}) {
-  
-  const products = loadProducts().filter((product) =>
-  isValidProduct(product, answers)
-);
+function normalizeAnswer(value?: string) {
+  if (!value) return "";
 
-console.log("RISPOSTE UTENTE", answers);
-console.log("PRODOTTI DOPO isValidProduct", products.length);
-console.log("PRIMO MATCH DOPO isValidProduct", products.find(p => p.age === "50+"));
+  const trimmed = value.trim();
+
+  const map: Record<string, string> = {
+    Compleanno: "compleanno",
+    Natale: "natale",
+    Anniversario: "anniversario",
+    "Regalo aziendale": "regalo-aziendale",
+
+    Partner: "partner",
+    Familiare: "familiare",
+    Amico: "amico",
+    "Dipendente/i": "dipendente/i",
+
+    Maschile: "maschio",
+    Femminile: "femmina",
+    Unisex: "unisex",
+
+    Creativa: "creativa",
+    Emotiva: "emotiva",
+    Pratica: "pratica",
+  };
+
+  return map[trimmed] || trimmed.toLowerCase();
+}
+
+function pushUniqueByCategory(source: any[], target: any[], limit: number) {
+  const usedCategories = new Set(
+    target
+      .map((product) => getFirstValue(product.category).trim().toLowerCase())
+      .filter(Boolean),
+  );
+
+  for (const product of source) {
+    if (target.length >= limit) break;
+
+    const alreadySelected = target.some((p) => p.link === product.link);
+    if (alreadySelected) continue;
+
+    const categoryKey = getFirstValue(product.category).trim().toLowerCase();
+
+    if (categoryKey && usedCategories.has(categoryKey)) continue;
+
+    target.push(product);
+
+    if (categoryKey) {
+      usedCategories.add(categoryKey);
+    }
+  }
+}
+
+function pushUnique(source: any[], target: any[], limit: number) {
+  for (const product of source) {
+    if (target.length >= limit) break;
+
+    const alreadySelected = target.some((p) => p.link === product.link);
+    if (alreadySelected) continue;
+
+    target.push(product);
+  }
+}
+
+export async function getTopProducts(answers: Answers = {}) {
+  const page = Number(answers.page || 1);
+  const normalizedAnswers = {
+    occasion: normalizeAnswer(answers.occasion),
+    relationship: normalizeAnswer(answers.relationship),
+    age: normalizeAnswer(answers.age),
+    personality: normalizeAnswer(answers.personality),
+    gender: normalizeAnswer(answers.gender),
+    budget: answers.budget,
+  };
+
+  const allProducts = await loadProducts();
+
+  const products = allProducts.filter((product) =>
+    isValidProduct(product, normalizedAnswers),
+  );
+
+  console.log("RISPOSTE UTENTE", answers);
+  console.log("RISPOSTE NORMALIZZATE", normalizedAnswers);
+  console.log("PRODOTTI RAW DB", allProducts);
+  console.log("PRODOTTI DOPO isValidProduct", products);
 
   const scored = products
-  .map((product) => {
-    let score = 0;
-    const price = Number(product.price || 0);
+    .map((product) => {
+      let score = 0;
+      const price = Number(product.price || 0);
 
-    if (answers.budget === "1-20" && (price < 1 || price > 20)) return null;
-    if (answers.budget === "20-30" && (price <= 20 || price > 30)) return null;
-    if (answers.budget === "30-50" && (price <= 30 || price > 50)) return null;
-    if (answers.budget === "50-100" && (price <= 50 || price > 100)) return null;
-    if (answers.budget === "100+" && price <= 100) return null;
+      if (answers.budget === "1-20" && (price < 1 || price > 20)) return null;
+      if (answers.budget === "20-30" && (price <= 20 || price > 30)) return null;
+      if (answers.budget === "30-50" && (price <= 30 || price > 50)) return null;
+      if (answers.budget === "50-100" && (price <= 50 || price > 100)) return null;
+      if (answers.budget === "100+" && price <= 100) return null;
 
-    if (product.occasion === answers.occasion) {
-  score += 3;
-} else {
-  return null;
-}
+      if (hasMatch(product.occasion, normalizedAnswers.occasion)) {
+        score += 3;
+      } else {
+        return null;
+      }
 
-if (product.relationship === answers.relationship) {
-  score += 3;
-} else {
-  return null;
-}
+      if (hasMatch(product.relationship, normalizedAnswers.relationship)) {
+        score += 3;
+      } else {
+        return null;
+      }
 
-    if (answers.age === "25+") {
-  if (product.age === "26-35" || product.age === "36-50" || product.age === "50+") {
-    score += 5;
-  } else {
-    score -= 3;
-  }
-} else if (product.age === answers.age) {
-  score += 5;
-} else {
-  score -= 3;
-}
+      if (hasMatch(product.age, normalizedAnswers.age)) {
+        score += 5;
+      } else {
+        return null;
+      }
 
-    if (answers.personality && answers.personality !== "Neutra") {
-  if (product.personality.includes(answers.personality)) {
-    score += 2;
-  } else {
-    return null;
-  }
-}
+      if (hasMatch(product.personality, normalizedAnswers.personality)) {
+        score += 2;
+      }
 
-    if (answers.gender && product.gender) {
-  if (answers.gender === "Unisex") {
-    if (product.gender !== "Unisex") {
-      return null;
-    }
-  } else {
-    if (product.gender === answers.gender) {
-      score += 3;
-    } else {
-      return null;
-    }
-  }
-}
+      const selectedGender = normalizedAnswers.gender;
+      const hasExactGender = hasMatch(product.gender, selectedGender);
+      const hasUnisexGender = hasMatch(product.gender, "unisex");
 
-    if (
-      product.occasion === answers.occasion &&
-      product.relationship === answers.relationship &&
-      product.age === answers.age
-    ) {
-      score += 5;
-    }
+      if (selectedGender === "maschio" || selectedGender === "femmina") {
+        if (!hasExactGender && !hasUnisexGender) {
+          return null;
+        }
 
-    return {
-      ...product,
-      score,
-    };
-  })
-  .filter((product): product is NonNullable<typeof product> => product !== null);
+        if (hasExactGender) {
+          score += 3;
+        }
+      } else {
+        if (!hasExactGender) {
+          return null;
+        }
+
+        score += 3;
+      }
+
+      if (
+        hasMatch(product.occasion, normalizedAnswers.occasion) &&
+        hasMatch(product.relationship, normalizedAnswers.relationship) &&
+        hasMatch(product.age, normalizedAnswers.age)
+      ) {
+        score += 5;
+      }
+
+      return {
+        ...product,
+        score,
+      };
+    })
+    .filter((product): product is NonNullable<typeof product> => product !== null);
 
   scored.sort((a, b) => {
-  // 1. PRIORITÀ: score
-  if (b.score !== a.score) {
-    return b.score - a.score;
+    if (b.score !== a.score) {
+      return b.score - a.score;
+    }
+
+    if (a.price !== b.price) {
+      return a.price - b.price;
+    }
+
+    return a.name.localeCompare(b.name);
+  });
+
+    const selectedPool: any[] = [];
+  const startIndex = (page - 1) * 5;
+const endIndex = startIndex + 5;
+  const strictGenderSelection =
+    normalizedAnswers.gender === "maschio" || normalizedAnswers.gender === "femmina";
+
+  if (strictGenderSelection) {
+    const exactGenderProducts = scored.filter((product) =>
+      hasMatch(product.gender, normalizedAnswers.gender),
+    );
+
+    const unisexOnlyProducts = scored.filter((product) => {
+      const hasExactGender = hasMatch(product.gender, normalizedAnswers.gender);
+      const hasUnisexGender = hasMatch(product.gender, "unisex");
+      return !hasExactGender && hasUnisexGender;
+    });
+
+        pushUniqueByCategory(exactGenderProducts, selectedPool, 1000);
+    pushUnique(exactGenderProducts, selectedPool, 1000);
+
+    if (unisexOnlyProducts.length > 0) {
+      pushUnique(unisexOnlyProducts, selectedPool, 1000);
+    }
+  } else {
+        pushUniqueByCategory(scored, selectedPool, 1000);
+    pushUnique(scored, selectedPool, 1000);
   }
 
-  // 2. PRIORITÀ: prezzo (più basso prima)
-  if (a.price !== b.price) {
-    return a.price - b.price;
-  }
+  const paginated = selectedPool.slice(startIndex, endIndex);
 
-  // 3. PRIORITÀ: ordine alfabetico
-  return a.name.localeCompare(b.name);
-});
-
-  const selected: any[] = [];
-const usedCategories = new Set<string>();
-
-// primo passaggio: privilegia categorie diverse
-for (const product of scored) {
-  if (selected.length >= 5) break;
-
-  const categoryKey = (product.category || "").trim().toLowerCase();
-
-  if (usedCategories.has(categoryKey)) continue;
-
-  selected.push(product);
-  usedCategories.add(categoryKey);
-}
-
-// secondo passaggio: se sono pochi, aggiungi anche categorie già usate
-for (const product of scored) {
-  if (selected.length >= 5) break;
-
-  const alreadySelected = selected.some((p) => p.link === product.link);
-  if (alreadySelected) continue;
-
-  selected.push(product);
-}
-
-// fallback: se non arriviamo a 5, riempiamo comunque
-while (selected.length < 5) {
-  selected.push({
+while (paginated.length < 5) {
+  paginated.push({
     name: "Rofi sta cercando...",
     isPlaceholder: true,
   });
 }
 
-const top5 = selected;
-
-  return top5;
+return paginated;
 }

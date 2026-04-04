@@ -16,7 +16,6 @@ export async function POST(req: NextRequest) {
       sourceShop,
       price,
       imageUrl,
-      minAge,
       occasions = [],
       ages = [],
       genders = [],
@@ -25,6 +24,33 @@ export async function POST(req: NextRequest) {
       categories = [],
     } = body;
 
+    // Estrazione ASIN da link Amazon
+    let asin = null;
+
+    if (sourceUrl && sourceUrl.includes("amazon")) {
+      const match = sourceUrl.match(/\/dp\/([A-Z0-9]{10})/);
+
+      if (match && match[1]) {
+        asin = match[1];
+      }
+    }
+
+    // Generazione link affiliato pulito
+    let cleanAffiliateUrl = sourceUrl;
+
+    if (asin) {
+      cleanAffiliateUrl = `https://www.amazon.it/dp/${asin}/?tag=rofi21-21`;
+    }
+
+    console.log("AGES DAL FRONTEND:", ages);
+    console.log("PERSONALITIES DAL FRONTEND:", personalities);
+    console.log("CATEGORIES DAL FRONTEND:", categories);
+
+    const allPersonalities = await sql`
+      SELECT id, slug FROM personalities
+    `;
+    console.log("PERSONALITIES DB:", allPersonalities);
+
     const result = await sql`
       INSERT INTO products (
         display_name,
@@ -32,21 +58,40 @@ export async function POST(req: NextRequest) {
         source_url,
         source_shop,
         price,
-        image_url,
-        min_age
+        image_url
       ) VALUES (
         ${displayName},
         ${realName},
-        ${sourceUrl},
-        ${sourceShop},
+        ${cleanAffiliateUrl},
+        ${sourceShop || (asin ? "amazon" : null)},
         ${price},
-        ${imageUrl},
-        ${minAge}
+        ${imageUrl}
       )
       RETURNING id;
     `;
 
     const productId = result[0].id;
+
+    const debug = {
+      displayName: !!displayName,
+      realName: !!realName,
+      sourceUrl: !!cleanAffiliateUrl,
+      sourceShop: !!(sourceShop || (asin ? "amazon" : null)),
+      price: price !== null && price !== undefined,
+      imageUrl: !!imageUrl,
+      occasionsRequested: occasions.length,
+      occasionsSaved: 0,
+      agesRequested: ages.length,
+      agesSaved: 0,
+      gendersRequested: genders.length,
+      gendersSaved: 0,
+      relationshipsRequested: relationships.length,
+      relationshipsSaved: 0,
+      personalitiesRequested: personalities.length,
+      personalitiesSaved: 0,
+      categoriesRequested: categories.length,
+      categoriesSaved: 0,
+    };
 
     for (const slug of occasions) {
       const occasion = await sql`
@@ -60,6 +105,7 @@ export async function POST(req: NextRequest) {
           INSERT INTO product_occasions (product_id, occasion_id)
           VALUES (${productId}, ${occasion[0].id});
         `;
+        debug.occasionsSaved++;
       }
     }
 
@@ -75,6 +121,7 @@ export async function POST(req: NextRequest) {
           INSERT INTO product_ages (product_id, age_id)
           VALUES (${productId}, ${age[0].id});
         `;
+        debug.agesSaved++;
       }
     }
 
@@ -90,40 +137,59 @@ export async function POST(req: NextRequest) {
           INSERT INTO product_genders (product_id, gender_id)
           VALUES (${productId}, ${gender[0].id});
         `;
+        debug.gendersSaved++;
       }
     }
 
     for (const slug of relationships) {
-  const relationship = await sql`
-    SELECT id FROM relationships
-    WHERE slug = ${slug}
-    LIMIT 1;
-  `;
+      const relationship = await sql`
+        SELECT id FROM relationships
+        WHERE slug = ${slug}
+        LIMIT 1;
+      `;
 
-  if (relationship.length > 0) {
-    await sql`
-      INSERT INTO product_relationships (product_id, relationship_id)
-      VALUES (${productId}, ${relationship[0].id});
-    `;
-  }
-}
+      if (relationship.length > 0) {
+        await sql`
+          INSERT INTO product_relationships (product_id, relationship_id)
+          VALUES (${productId}, ${relationship[0].id});
+        `;
+        debug.relationshipsSaved++;
+      }
+    }
+
     for (const slug of personalities) {
-  const personality = await sql`
-    SELECT id FROM personalities
-    WHERE slug = ${slug}
-    LIMIT 1;
-  `;
+      const personality = await sql`
+        SELECT id FROM personalities
+        WHERE slug = ${slug}
+        LIMIT 1;
+      `;
 
-  if (personality.length > 0) {
-    await sql`
-      INSERT INTO product_personalities (product_id, personality_id)
-      VALUES (${productId}, ${personality[0].id});
-    `;
-  }
-}
+      if (personality.length > 0) {
+        await sql`
+          INSERT INTO product_personalities (product_id, personality_id)
+          VALUES (${productId}, ${personality[0].id});
+        `;
+        debug.personalitiesSaved++;
+      }
+    }
 
-    
-    return Response.json({ ok: true, productId });
+    for (const slug of categories) {
+      const category = await sql`
+        SELECT id FROM categories
+        WHERE slug = ${slug}
+        LIMIT 1;
+      `;
+
+      if (category.length > 0) {
+        await sql`
+          INSERT INTO product_categories (product_id, category_id)
+          VALUES (${productId}, ${category[0].id});
+        `;
+        debug.categoriesSaved++;
+      }
+    }
+
+    return Response.json({ ok: true, productId, debug });
   } catch (error) {
     console.error(error);
     return Response.json({ ok: false, error: "Errore salvataggio" });

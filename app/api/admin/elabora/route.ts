@@ -1,10 +1,9 @@
 import OpenAI from "openai";
+import { NextResponse } from "next/server";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
-
-import { NextResponse } from "next/server";
 
 export async function POST(req: Request) {
   try {
@@ -20,69 +19,73 @@ export async function POST(req: Request) {
     }
 
     let realProductName = productName;
-let productImage = "";
-let productPrice = "";
+    let productImage = "";
+    let productPrice = "";
 
-try {
-  const response = await fetch(productUrl, {
-    headers: {
-      "User-Agent":
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-    },
-  });
+    try {
+      const response = await fetch(productUrl, {
+        headers: {
+          "User-Agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        },
+      });
 
-  const html = await response.text();
+      const html = await response.text();
+      console.log("STATUS AMAZON:", response.status);
+      console.log("HTML INIZIO:", html.slice(0, 500));
 
-  // TITOLO (Amazon <title>)
-  const titleMatch = html.match(/<title>(.*?)<\/title>/i);
-  if (titleMatch && titleMatch[1]) {
-    realProductName = titleMatch[1]
-      .replace("Amazon.it:", "")
-      .replace(": Amazon.it", "")
-      .trim();
-  }
+      // TITOLO (Amazon <title>)
+      const titleMatch = html.match(/<title>(.*?)<\/title>/i);
+      if (titleMatch && titleMatch[1]) {
+        realProductName = titleMatch[1]
+          .replace("Amazon.it:", "")
+          .replace(": Amazon.it", "")
+          .trim();
+      }
 
-  // IMMAGINE (best effort)
-  const imageMatch = html.match(/"large":"(https:[^"]+)"/);
-  if (imageMatch && imageMatch[1]) {
-    productImage = imageMatch[1].replace(/\\u0026/g, "&");
-  }
+      // IMMAGINE (best effort)
+      const imageMatch = html.match(/"large":"(https:[^"]+)"/);
+      if (imageMatch && imageMatch[1]) {
+        productImage = imageMatch[1].replace(/\\u0026/g, "&");
+      }
 
-  // PREZZO (best effort semplice)
-  const pricePatterns = [
-  /"priceToPay"\s*:\s*\{\s*"priceAmount"\s*:\s*([\d.,]+)/i,
-  /"corePriceDisplay_desktop_feature_div"[\s\S]*?a-price-whole[^>]*>\s*([\d.]+)\s*<[\s\S]*?a-price-fraction[^>]*>\s*(\d{2})/i,
-  /a-price-whole[^>]*>\s*([\d.]+)\s*</i,
-  /"priceAmount"\s*:\s*([\d.,]+)/i,
-  /"price"\s*:\s*"([\d.,]+)"/i,
-];
+      // PREZZO (best effort semplice)
+      const pricePatterns = [
+        /"priceToPay"\s*:\s*\{\s*"priceAmount"\s*:\s*([\d.,]+)/i,
+        /"corePriceDisplay_desktop_feature_div"[\s\S]*?a-price-whole[^>]*>\s*([\d.]+)\s*<[\s\S]*?a-price-fraction[^>]*>\s*(\d{2})/i,
+        /a-price-whole[^>]*>\s*([\d.]+)\s*</i,
+        /"priceAmount"\s*:\s*([\d.,]+)/i,
+        /"price"\s*:\s*"([\d.,]+)"/i,
+      ];
 
-for (const pattern of pricePatterns) {
-  const match = html.match(pattern);
+      for (const pattern of pricePatterns) {
+        const match = html.match(pattern);
 
-  if (!match) continue;
+        if (!match) continue;
 
-  if (match[2]) {
-    productPrice = `${match[1].replace(/\./g, "")}.${match[2]}`;
-    break;
-  }
+        if (match[2]) {
+          productPrice = `${match[1].replace(/\./g, "")}.${match[2]}`;
+          break;
+        }
 
-  if (match[1]) {
-    productPrice = match[1].replace(/\./g, "").replace(",", ".");
-    break;
-  }
-}
-} catch (error) {
-  console.log("Errore scraping:", error);
-}
+        if (match[1]) {
+          productPrice = match[1].replace(/\./g, "").replace(",", ".");
+          break;
+        }
+      }
+    } catch (error) {
+      console.log("Errore scraping:", error);
+    }
+
+    console.log("REAL PRODUCT NAME PASSATO ALLA AI:", realProductName);
 
     const completion = await openai.chat.completions.create({
-  model: "gpt-4o-mini",
-  temperature: 0.2,
-  messages: [
-    {
-      role: "system",
-      content: `
+      model: "gpt-4o-mini",
+      temperature: 0.2,
+      messages: [
+        {
+          role: "system",
+          content: `
 Sei un assistente che classifica prodotti regalo per un sistema chiamato Rofi.
 
 Devi restituire SOLO un JSON con questa struttura:
@@ -92,22 +95,30 @@ Devi restituire SOLO un JSON con questa struttura:
   "ages": [],
   "genders": [],
   "relationships": [],
-  "personalities": []
+  "personalities": [],
+  "categories": []
 }
 
 Devi usare SOLO questi valori:
+⚠️ REGOLE RIGIDE (OBBLIGATORIE):
+
+- Puoi usare SOLO ed ESCLUSIVAMENTE i valori presenti nelle liste sopra
+- NON puoi inventare, modificare o tradurre valori
+- NON puoi usare sinonimi
+- Se non sei sicuro, NON inserire il valore
+- È meglio lasciare un array vuoto piuttosto che inserire un valore sbagliato
 
 occasions: compleanno, natale, anniversario, regalo-aziendale
-ages: 6-12, 13-18, 18-25, 26-35, 36-50, 50+
+ages: 0-6, 7-12, 13-18, 19-25, 26-35, 36-50, 50+
 genders: maschio, femmina, unisex
-relationships: partner, familiare, amico, dipendente
-personalities: creativa, tecnologica, sportiva, elegante
+relationships: partner, familiare, amico, dipendente/i
+personalities: creativa, emotiva, pratica
+categories: tech, casa, benessere, tempo-libero
 
 Definizioni personalità:
-- creativa = oggetti artistici, originali, colorati
-- tecnologica = elettronica, gadget, innovazione
-- sportiva = sport, fitness, attività fisica
-- elegante = prodotti raffinati, minimal, di classe (es. pelle, design sobrio)
+- creativa = oggetti artistici, originali, decorativi, colorati, teneri o fantasiosi
+- emotiva = prodotti affettivi, romantici, simbolici, dolci, sentimentali
+- pratica = prodotti utili, funzionali, concreti, per uso quotidiano
 
 REGOLE IMPORTANTI:
 
@@ -118,43 +129,48 @@ REGOLE IMPORTANTI:
 5. Se è per adulti → usa età come 18-25, 26-35 o superiori
 6. Scegli categorie utili per un sistema di suggerimento regali, NON risposte vaghe
 7. NON inventare categorie fuori lista
-8. Rispondi SOLO con JSON, senza testo extra
-      `,
-    },
-    {
-  role: "user",
-  content: realProductName,
-},
-  ],
-});
+8. NON inventare personalità fuori lista
+9. NON inventare valori per nessun campo (occasions, ages, genders, relationships, personalities, categories)
+10. Se un valore non è chiaramente mappabile, NON inserirlo
+11. Rispondi SOLO con JSON, senza testo extra
+          `,
+        },
+        {
+          role: "user",
+          content: realProductName,
+        },
+      ],
+    });
 
-const text = completion.choices[0].message.content || "{}";
+    const text = completion.choices[0].message.content || "{}";
+    console.log("RISPOSTA GREZZA AI:", text);
 
-let suggestions;
+    let suggestions;
 
-try {
+    try {
   suggestions = JSON.parse(text);
-} catch {
+  console.log("SUGGESTIONS PARSATE:", suggestions);
+} catch (error) {
+  console.log("ERRORE PARSE JSON AI:", error);
   suggestions = {
     occasions: [],
     ages: [],
     genders: [],
     relationships: [],
     personalities: [],
+    categories: [],
   };
+  console.log("SUGGESTIONS FALLBACK VUOTE:", suggestions);
 }
 
-return NextResponse.json({
-  ok: true,
-  realProductName,
-  productImage,
-  productPrice,
-  suggestions,
-});
+    return NextResponse.json({
+      ok: true,
+      realProductName,
+      productImage,
+      productPrice,
+      suggestions,
+    });
   } catch (error) {
-    return NextResponse.json(
-      { error: "Errore interno" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Errore interno" }, { status: 500 });
   }
-}
+} 

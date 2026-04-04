@@ -1,5 +1,16 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+
+const STORAGE_KEY = "rofi-start-form";
+
+type SavedForm = {
+  occasion: string;
+  relationship: string;
+  age: string;
+  personality: string;
+  budget: string;
+  gender: string;
+};
 
 export default function Start() {
   const [occasion, setOccasion] = useState("");
@@ -14,6 +25,98 @@ export default function Start() {
   const [personality, setPersonality] = useState("");
   const [budget, setBudget] = useState("");
   const [gender, setGender] = useState("");
+
+  function applyOccasionRules(
+    value: string,
+    currentGender: string,
+    currentPersonality: string,
+    currentRelationship: string,
+    currentAge: string,
+  ) {
+    if (value === "Regalo aziendale") {
+      return {
+        relationship: "Dipendente/i",
+        relationshipLocked: true,
+        age: "25+",
+        ageLocked: true,
+        ageDisplayLocked: true,
+        gender: "Unisex",
+        genderLocked: true,
+        personality: "Neutra",
+        personalityLocked: true,
+      };
+    }
+
+    if (value === "Anniversario") {
+      return {
+        relationship: currentRelationship,
+        relationshipLocked: false,
+        age: "",
+        ageLocked: true,
+        ageDisplayLocked: false,
+        gender: currentGender === "Unisex" ? "" : currentGender,
+        genderLocked: false,
+        personality: currentPersonality === "Neutra" ? "" : currentPersonality,
+        personalityLocked: false,
+      };
+    }
+
+    return {
+      relationship: currentRelationship,
+      relationshipLocked: false,
+      age: currentAge === "25+" ? "" : currentAge,
+      ageLocked: false,
+      ageDisplayLocked: false,
+      gender: currentGender === "Unisex" ? "" : currentGender,
+      genderLocked: false,
+      personality: currentPersonality === "Neutra" ? "" : currentPersonality,
+      personalityLocked: false,
+    };
+  }
+
+  useEffect(() => {
+    const raw = sessionStorage.getItem(STORAGE_KEY);
+    if (!raw) return;
+
+    try {
+      const saved: SavedForm = JSON.parse(raw);
+
+      const rules = applyOccasionRules(
+        saved.occasion || "",
+        saved.gender || "",
+        saved.personality || "",
+        saved.relationship || "",
+        saved.age || "",
+      );
+
+      setOccasion(saved.occasion || "");
+      setRelationship(rules.relationship);
+      setRelationshipLocked(rules.relationshipLocked);
+      setAge(rules.age);
+      setAgeLocked(rules.ageLocked);
+      setAgeDisplayLocked(rules.ageDisplayLocked);
+      setGender(rules.gender);
+      setGenderLocked(rules.genderLocked);
+      setPersonality(rules.personality);
+      setPersonalityLocked(rules.personalityLocked);
+      setBudget(saved.budget || "");
+    } catch {
+      sessionStorage.removeItem(STORAGE_KEY);
+    }
+  }, []);
+
+  useEffect(() => {
+    const data: SavedForm = {
+      occasion,
+      relationship,
+      age,
+      personality,
+      budget,
+      gender,
+    };
+
+    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  }, [occasion, relationship, age, personality, budget, gender]);
 
   const isFormValid =
     occasion && relationship && age && personality && budget && gender;
@@ -49,41 +152,23 @@ export default function Start() {
               const value = e.target.value;
               setOccasion(value);
 
-              if (value === "Regalo aziendale") {
-                setRelationship("Dipendente/i");
-                setRelationshipLocked(true);
+              const rules = applyOccasionRules(
+                value,
+                gender,
+                personality,
+                relationship,
+                age,
+              );
 
-                setAge("25+");
-                setAgeLocked(true);
-                setAgeDisplayLocked(true);
-
-                setGender("Unisex");
-                setGenderLocked(true);
-
-                setPersonality("Neutra");
-                setPersonalityLocked(true);
-              } else if (value === "Anniversario") {
-                setAge("");
-                setAgeLocked(true);
-                setAgeDisplayLocked(false);
-
-                setGenderLocked(false);
-                setPersonalityLocked(false);
-                setRelationshipLocked(false);
-
-                if (gender === "Unisex") setGender("");
-                if (personality === "Neutra") setPersonality("");
-              } else {
-                setRelationshipLocked(false);
-                setAgeLocked(false);
-                setAgeDisplayLocked(false);
-                setGenderLocked(false);
-                setPersonalityLocked(false);
-
-                if (age === "25+") setAge("");
-                if (gender === "Unisex") setGender("");
-                if (personality === "Neutra") setPersonality("");
-              }
+              setRelationship(rules.relationship);
+              setRelationshipLocked(rules.relationshipLocked);
+              setAge(rules.age);
+              setAgeLocked(rules.ageLocked);
+              setAgeDisplayLocked(rules.ageDisplayLocked);
+              setGender(rules.gender);
+              setGenderLocked(rules.genderLocked);
+              setPersonality(rules.personality);
+              setPersonalityLocked(rules.personalityLocked);
             }}
             style={{
               width: "100%",
@@ -151,12 +236,15 @@ export default function Start() {
             {occasion === "Regalo aziendale" && <option>25+</option>}
 
             {occasion !== "Regalo aziendale" && occasion !== "Anniversario" && (
-              <option>0-12</option>
+              <>
+                <option>0-6</option>
+                <option>7-12</option>
+              </>
             )}
 
             {occasion !== "Regalo aziendale" && <option>13-18</option>}
 
-            <option>18-25</option>
+            <option>19-25</option>
             <option>26-35</option>
             <option>36-50</option>
             <option>50+</option>

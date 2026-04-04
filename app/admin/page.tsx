@@ -17,11 +17,14 @@ export default function AdminPage() {
     [],
   );
 
+  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
+
   const [aiOccasions, setAiOccasions] = useState<string[]>([]);
   const [aiAges, setAiAges] = useState<string[]>([]);
   const [aiGenders, setAiGenders] = useState<string[]>([]);
   const [aiRelationships, setAiRelationships] = useState<string[]>([]);
   const [aiPersonalities, setAiPersonalities] = useState<string[]>([]);
+  const [aiCategories, setAiCategories] = useState<string[]>([]);
   const [isLoadingAi, setIsLoadingAi] = useState(false);
   const [loadingDots, setLoadingDots] = useState(".");
   useEffect(() => {
@@ -41,8 +44,72 @@ export default function AdminPage() {
   const [productImage, setProductImage] = useState("");
   const [productPrice, setProductPrice] = useState("");
 
+  // 🔒 Popup bloccanti Amazon
+  const [showNamePopup, setShowNamePopup] = useState(false);
+  const [showImagePopup, setShowImagePopup] = useState(false);
+  const [showPricePopup, setShowPricePopup] = useState(false);
+
   const [modalMessage, setModalMessage] = useState("");
   const [modalType, setModalType] = useState<"success" | "error" | "">("");
+
+  const [debugReport, setDebugReport] = useState<any>(null);
+  const [showDebugPopup, setShowDebugPopup] = useState(false);
+
+  {
+    showDebugPopup && debugReport && (
+      <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/70 backdrop-blur-sm">
+        <div className="w-full max-w-lg rounded-2xl border border-neutral-800 bg-neutral-900 p-8 shadow-2xl">
+          <h2 className="mb-5 text-2xl font-semibold text-white text-center">
+            Debug salvataggio prodotto
+          </h2>
+
+          <div className="space-y-2 text-sm text-neutral-200">
+            <p>Nome mostrato: {debugReport.displayName ? "OK" : "KO"}</p>
+            <p>Nome intero: {debugReport.realName ? "OK" : "KO"}</p>
+            <p>Link: {debugReport.sourceUrl ? "OK" : "KO"}</p>
+            <p>Shop: {debugReport.sourceShop ? "OK" : "KO"}</p>
+            <p>Prezzo: {debugReport.price ? "OK" : "KO"}</p>
+            <p>Immagine: {debugReport.imageUrl ? "OK" : "KO"}</p>
+
+            <hr className="my-3 border-neutral-700" />
+
+            <p>
+              Occasioni: {debugReport.occasionsSaved}/
+              {debugReport.occasionsRequested}
+            </p>
+            <p>
+              Età: {debugReport.agesSaved}/{debugReport.agesRequested}
+            </p>
+            <p>
+              Sessi: {debugReport.gendersSaved}/{debugReport.gendersRequested}
+            </p>
+            <p>
+              Relazioni: {debugReport.relationshipsSaved}/
+              {debugReport.relationshipsRequested}
+            </p>
+            <p>
+              Personalità: {debugReport.personalitiesSaved}/
+              {debugReport.personalitiesRequested}
+            </p>
+            <p>
+              Categorie: {debugReport.categoriesSaved}/
+              {debugReport.categoriesRequested}
+            </p>
+          </div>
+
+          <button
+            onClick={() => {
+              setShowDebugPopup(false);
+              setDebugReport(null);
+            }}
+            className="mt-6 w-full cursor-pointer rounded-xl bg-white py-3 font-semibold text-black transition hover:bg-neutral-200"
+          >
+            OK
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   const isBasicValid = name.trim() !== "" && link.trim() !== "";
 
@@ -99,14 +166,18 @@ export default function AdminPage() {
           realName: realProductName || name,
           sourceUrl: link,
           sourceShop: "Amazon",
-          price: productPrice ? Number(productPrice) : 0,
+          price: productPrice ? Number(productPrice.replace(",", ".")) : 0,
           imageUrl: productImage || "",
-          minAge: null,
-          occasions: selectedOccasions,
-          ages: selectedAges,
-          genders: selectedGenders,
-          relationships: selectedRelationships,
-          personalities: selectedPersonalities,
+          occasions: [...new Set([...selectedOccasions, ...aiOccasions])],
+          ages: [...new Set([...selectedAges, ...aiAges])],
+          genders: [...new Set([...selectedGenders, ...aiGenders])],
+          relationships: [
+            ...new Set([...selectedRelationships, ...aiRelationships]),
+          ],
+          personalities: [
+            ...new Set([...selectedPersonalities, ...aiPersonalities]),
+          ],
+          categories: [...new Set([...selectedCategories, ...aiCategories])],
         }),
       });
 
@@ -130,12 +201,14 @@ export default function AdminPage() {
       setSelectedGenders([]);
       setSelectedRelationships([]);
       setSelectedPersonalities([]);
+      setSelectedCategories([]);
 
       setAiOccasions([]);
       setAiAges([]);
       setAiGenders([]);
       setAiRelationships([]);
       setAiPersonalities([]);
+      setAiCategories([]);
     } catch (err) {
       setModalMessage("Errore durante il salvataggio");
       setModalType("error");
@@ -161,20 +234,27 @@ export default function AdminPage() {
     { label: "Partner", value: "partner" },
     { label: "Familiare", value: "familiare" },
     { label: "Amico", value: "amico" },
-    { label: "Dipendente", value: "dipendente" },
+    { label: "Dipendente/i", value: "dipendente/i" },
   ];
 
   const personalitiesList = [
     { label: "Creativa", value: "creativa" },
-    { label: "Tecnologica", value: "tecnologica" },
-    { label: "Sportiva", value: "sportiva" },
-    { label: "Elegante", value: "elegante" },
+    { label: "Emotiva", value: "emotiva" },
+    { label: "Pratica", value: "pratica" },
+  ];
+
+  const categoriesList = [
+    { label: "Tech", value: "tech" },
+    { label: "Casa", value: "casa" },
+    { label: "Benessere", value: "benessere" },
+    { label: "Tempo libero", value: "tempo-libero" },
   ];
 
   const agesList = [
-    { label: "6-12", value: "6-12" },
+    { label: "0-6", value: "0-6" },
+    { label: "7-12", value: "7-12" },
     { label: "13-18", value: "13-18" },
-    { label: "18-25", value: "18-25" },
+    { label: "19-25", value: "19-25" },
     { label: "26-35", value: "26-35" },
     { label: "36-50", value: "36-50" },
     { label: "50+", value: "50+" },
@@ -213,7 +293,15 @@ export default function AdminPage() {
                 type="text"
                 placeholder="Nome prodotto"
                 value={name}
-                onChange={(e) => setName(e.target.value)}
+                onChange={(e) => {
+                  const value = e.target.value;
+
+                  const formatted = value
+                    .toLowerCase()
+                    .replace(/\b\w/g, (char) => char.toUpperCase());
+
+                  setName(formatted);
+                }}
                 className="w-full rounded-xl border border-neutral-700 bg-neutral-950/80 px-4 py-3 text-white"
               />
 
@@ -230,6 +318,14 @@ export default function AdminPage() {
                   type="button"
                   disabled={!isBasicValid}
                   onClick={async () => {
+                    // 🔍 Validazione link
+                    try {
+                      new URL(link);
+                    } catch {
+                      setModalMessage("Questo non è un link valido");
+                      setModalType("error");
+                      return;
+                    }
                     try {
                       setModalMessage("Sto analizzando il prodotto");
                       setModalType("");
@@ -247,6 +343,11 @@ export default function AdminPage() {
                       });
 
                       const data = await res.json();
+                      console.log("RISPOSTA /api/admin/elabora:", data);
+                      console.log(
+                        "SUGGERIMENTI AI FRONTEND:",
+                        data.suggestions,
+                      );
 
                       if (!res.ok) {
                         setModalMessage(
@@ -263,11 +364,15 @@ export default function AdminPage() {
                       setProductImage(data.productImage || "");
                       setProductPrice(data.productPrice || "");
 
+                      setShowNamePopup(true);
+
                       setAiOccasions(data.suggestions.occasions || []);
                       setAiAges(data.suggestions.ages || []);
                       setAiGenders(data.suggestions.genders || []);
                       setAiRelationships(data.suggestions.relationships || []);
                       setAiPersonalities(data.suggestions.personalities || []);
+                      setAiCategories(data.suggestions.categories || []);
+                      setSelectedCategories(data.suggestions.categories || []);
                     } catch (error) {
                       setModalMessage("Errore durante l'elaborazione");
                       setModalType("error");
@@ -454,16 +559,11 @@ export default function AdminPage() {
                         className="flex items-center gap-3 cursor-pointer text-lg"
                       >
                         <input
-                          type="checkbox"
+                          type="radio"
+                          name="selectedGender"
                           className="sr-only"
                           checked={selectedGenders.includes(item.value)}
-                          onChange={() =>
-                            toggleValue(
-                              item.value,
-                              selectedGenders,
-                              setSelectedGenders,
-                            )
-                          }
+                          onChange={() => setSelectedGenders([item.value])}
                         />
 
                         <span
@@ -601,6 +701,178 @@ export default function AdminPage() {
           </div>
         </div>
       </div>
+
+      {showNamePopup && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl border border-neutral-800 bg-neutral-900 p-8 shadow-2xl text-center">
+            <h2 className="mb-3 text-xl font-semibold text-white">
+              Inserisci il nome intero
+            </h2>
+
+            <p className="mb-5 text-base text-neutral-300">
+              Questo prodotto Amazon richiede il nome completo prima di
+              continuare.
+            </p>
+
+            <input
+              type="text"
+              value={realProductName}
+              onChange={(e) => setRealProductName(e.target.value)}
+              placeholder="Nome intero prodotto"
+              className="mb-5 w-full rounded-xl border border-neutral-700 bg-neutral-950/80 px-4 py-3 text-white"
+            />
+
+            <button
+              type="button"
+              onClick={() => {
+                if (!realProductName.trim()) return;
+                setShowNamePopup(false);
+                setShowImagePopup(true);
+              }}
+              disabled={!realProductName.trim()}
+              className={`w-full rounded-xl py-3 font-semibold transition ${
+                realProductName.trim()
+                  ? "bg-white text-black hover:bg-neutral-200 cursor-pointer"
+                  : "bg-neutral-800 text-neutral-500 cursor-not-allowed"
+              }`}
+            >
+              Conferma
+            </button>
+          </div>
+        </div>
+      )}
+
+      {showImagePopup && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl border border-neutral-800 bg-neutral-900 p-8 shadow-2xl text-center">
+            <h2 className="mb-3 text-xl font-semibold text-white">
+              Inserisci immagine prodotto
+            </h2>
+
+            <p className="mb-5 text-base text-neutral-300">
+              Incolla il link dell'immagine del prodotto.
+            </p>
+
+            <input
+              type="file"
+              accept="image/*"
+              className="mb-5 w-full cursor-pointer rounded-xl border border-neutral-700 bg-neutral-950/80 px-4 py-3 text-white file:mr-4 file:cursor-pointer file:rounded-lg file:border-0 file:bg-white file:px-4 file:py-2 file:font-semibold file:text-black"
+              onChange={async (e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+
+                const formData = new FormData();
+                formData.append("file", file);
+
+                try {
+                  const res = await fetch("/api/admin/upload-image", {
+                    method: "POST",
+                    body: formData,
+                  });
+
+                  const data = await res.json();
+
+                  if (!res.ok) {
+                    alert(data.error || "Errore durante upload immagine");
+                    return;
+                  }
+
+                  setProductImage(data.url);
+                } catch {
+                  alert("Errore durante upload immagine");
+                }
+              }}
+            />
+
+            {productImage && (
+              <div className="mb-5 overflow-hidden rounded-xl border border-green-600/40 bg-green-600/10 p-3">
+                <p className="mb-3 text-sm font-medium text-green-300">
+                  Immagine caricata correttamente
+                </p>
+                <img
+                  src={productImage}
+                  alt="Anteprima prodotto caricata"
+                  className="mx-auto h-40 rounded-lg object-cover"
+                />
+              </div>
+            )}
+
+            <button
+              type="button"
+              onClick={() => {
+                if (!productImage.trim()) return;
+                setShowImagePopup(false);
+                setShowPricePopup(true);
+              }}
+              disabled={!productImage.trim()}
+              className={`w-full rounded-xl py-3 font-semibold transition ${
+                productImage.trim()
+                  ? "bg-white text-black hover:bg-neutral-200 cursor-pointer"
+                  : "bg-neutral-800 text-neutral-500 cursor-not-allowed"
+              }`}
+            >
+              Conferma
+            </button>
+          </div>
+        </div>
+      )}
+
+      {showPricePopup && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl border border-neutral-800 bg-neutral-900 p-8 shadow-2xl text-center">
+            <h2 className="mb-3 text-xl font-semibold text-white">
+              Inserisci prezzo prodotto
+            </h2>
+
+            <p className="mb-5 text-base text-neutral-300">
+              Inserisci il prezzo prima di continuare.
+            </p>
+
+            <input
+              type="text"
+              inputMode="decimal"
+              value={productPrice}
+              onChange={(e) => {
+                let value = e.target.value;
+
+                // sostituisce punto con virgola
+                value = value.replace(".", ",");
+
+                setProductPrice(value);
+              }}
+              placeholder="Es. 24.99"
+              className="mb-5 w-full rounded-xl border border-neutral-700 bg-neutral-950/80 px-4 py-3 text-white"
+            />
+
+            <button
+              type="button"
+              onClick={() => {
+                if (!productPrice.trim()) return;
+
+                let value = productPrice.replace(",", ".");
+                let number = parseFloat(value);
+
+                if (isNaN(number)) return;
+
+                // forza 2 decimali
+                const formatted = number.toFixed(2).replace(".", ",");
+
+                setProductPrice(formatted);
+                setShowPricePopup(false);
+              }}
+              disabled={!productPrice.trim()}
+              className={`w-full rounded-xl py-3 font-semibold transition ${
+                productPrice.trim()
+                  ? "bg-white text-black hover:bg-neutral-200 cursor-pointer"
+                  : "bg-neutral-800 text-neutral-500 cursor-not-allowed"
+              }`}
+            >
+              Conferma
+            </button>
+          </div>
+        </div>
+      )}
+
       {(modalMessage || isLoadingAi) && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
           <div className="w-full max-w-md rounded-2xl border border-neutral-800 bg-neutral-900 p-8 shadow-2xl text-center">
